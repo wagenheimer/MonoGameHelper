@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Wagenheimer.MonoGameHelper/Wagenheimer.MonoGameHelper.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Wagenheimer.MonoGameHelper.Tests/Wagenheimer.MonoGameHelper.Tests.csproj" />
+  </Folder>
+</Solution>
