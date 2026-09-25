@@ -388,6 +388,38 @@ dotnet add package Wagenheimer.MonoGameHelper --source ./src/Wagenheimer.MonoGam
 
 **Requirements:** .NET 10 SDK, MonoGame 3.8 (DesktopGL). Dependencies: `NLayer` (MP3) and `NVorbis` (OGG).
 
+### 14. Bézier Flight Paths (`BezierFlightPath`)
+
+- `BezierFlightPath`: a pure MonoGame cubic Bézier for short "fly to target" effects (objective
+  pickups, reward counters, item coins). It returns the interpolated point, the tangent velocity and
+  a rotation envelope that is exactly zero at both ends.
+
+```csharp
+using Wagenheimer.MonoGameHelper.Animation;
+
+var path = BezierFlightPath.Create(
+    start: worldPos,
+    end:   targetPos,
+    lateralOffset: 90f,   // sideways bow; sign flips the side
+    arcHeight: 120f);     // vertical lift against screen Y
+
+var position = path.PointAt(normalizedTime);          // 0..1
+var rotation = path.RotationAt(normalizedTime, 0.2f); // 0 at both ends
+var tangent  = path.VelocityAt(normalizedTime);       // for trails / alignment
+```
+
+Key properties:
+
+| Member | Meaning |
+| :--- | :--- |
+| `Create(start, end, lateralOffset, arcHeight)` | Builds the control points from an arch description |
+| `PointAt(t)` / `VelocityAt(t)` | Eased cubic position and first derivative |
+| `RotationAt(t, spin)` | Tangent rotation multiplied by a `sin(pi*t)^2` envelope |
+| `Evaluate(...)` / `CubicFirstDerivative(...)` | Raw static evaluation helpers |
+
+> The value type allocates nothing per update and does not depend on Nez or Gum: it only needs
+> `Microsoft.Xna.Framework.Vector2`.
+
 ---
 
 ## Quick Start
