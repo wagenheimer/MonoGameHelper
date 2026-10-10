@@ -23,6 +23,7 @@ Play sound effects and background music without depending on external codecs or 
 - Centralized audio bus management with `MasterVolume`, `MusicVolume`, and `SfxVolume`.
 - Sample-accurate looping and smooth **crossfades** for background music.
 - Fire-and-forget or trackable sound instances (`PlaySound`, `PlaySoundAndForget`, `PlayMusic`, `StopMusic`).
+- **Streamed music** via `MusicPlayer` (`Song`/`MediaPlayer`) — plays a long track without keeping its whole PCM in RAM; falls back gracefully where streaming isn't supported. Use it for music; use `AudioManager` for SFX.
 
 ### 3. Modal Dialog & Escape Stack
 Manage stacked UI menus, popups, and confirmation dialogs:
@@ -491,6 +492,18 @@ AudioManager.PlaySound("sfx-click");
 
 // In your main Game.Update loop:
 AudioManager.Update(deltaTime);
+```
+
+Long music tracks: decode-free **streaming** (no full PCM in RAM). Prefer this for background music;
+`AudioManager.PlayMusic` decodes the whole track into a `SoundEffect` (better for short loops / crossfades):
+
+```csharp
+// Starts streaming; returns false if the platform doesn't support it (then fall back to AudioManager).
+if (!MusicPlayer.Play("menu", "/abs/path/Content/Audio/music/menu.ogg", loop: true, volume: 0.7f))
+    AudioManager.PlayMusic("menu", fadeDuration: 1.5f);
+
+MusicPlayer.Volume = 0.7f;   // 0..1
+MusicPlayer.Stop();
 ```
 
 ### Safe Storage
