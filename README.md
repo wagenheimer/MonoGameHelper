@@ -591,6 +591,29 @@ GumAtlasBinder.BindFromJson(
 
 ---
 
+### 17. Game Window Icon (`WindowIcon`)
+
+Applies a Windows `.ico` to the **game window** (title bar, taskbar and Alt-Tab):
+- **One call** from `Game.Initialize` — no SDL2 interop and no reflection into the backend.
+- Covers what the project's `<ApplicationIcon>` **cannot**: hosting the game in another process (e.g. `dotnet App.dll` under a debugger, where the app manifest — and therefore the exe icon — is ignored) or a backend that never sets a window icon.
+- Loads the **small and big** sizes with `LoadImage`, so each surface gets the icon resolution it wants.
+- Cross-platform safe: a no-op outside Windows, and every failure path returns `false` (an icon never brings a game down).
+
+```csharp
+using Wagenheimer.MonoGameHelper.Graphics;
+
+protected override void Initialize()
+{
+    base.Initialize(); // the native window now exists
+
+    WindowIcon.Apply(Window.Handle, "Content/Icon.ico");
+}
+```
+
+> Pair it with `<ApplicationIcon>Content\Icon.ico</ApplicationIcon>` in the `.csproj` for the **executable's** icon (Explorer, shortcuts, and the taskbar when launched from the `.exe`). The helper keeps the loaded `HICON`s alive internally, so it should be called once, after the window exists.
+
+---
+
 ## Quick Start
 
 ### Hybrid Input & Cursor Setup
