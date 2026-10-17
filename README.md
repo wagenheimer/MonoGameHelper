@@ -591,26 +591,44 @@ GumAtlasBinder.BindFromJson(
 
 ---
 
-### 17. Game Window Icon (`WindowIcon`)
+### 17. Game Icon — executable **and window** (`Icon.ico` + embedded `Icon.bmp`)
 
-Applies a Windows `.ico` to the **game window** (title bar, taskbar and Alt-Tab):
-- **One call** from `Game.Initialize` — no SDL2 interop and no reflection into the backend.
-- Covers what the project's `<ApplicationIcon>` **cannot**: hosting the game in another process (e.g. `dotnet App.dll` under a debugger, where the app manifest — and therefore the exe icon — is ignored) or a backend that never sets a window icon.
-- Loads the **small and big** sizes with `LoadImage`, so each surface gets the icon resolution it wants.
-- Cross-platform safe: a no-op outside Windows, and every failure path returns `false` (an icon never brings a game down).
+Two different mechanisms, and mixing them up is the classic trap:
+
+| Surface | Mechanism |
+| :--- | :--- |
+| **Executable** (Explorer, shortcuts) | `<ApplicationIcon>Content\Icon.ico</ApplicationIcon>` in the `.csproj` |
+| **Window** (title bar, taskbar, Alt-Tab) | an **embedded resource named `Icon.bmp`** in the *entry* assembly |
+
+MonoGame's SDL backend (`SdlGameWindow`, DesktopGL) looks the window icon up **by resource name**, in this order:
 
 ```csharp
-using Wagenheimer.MonoGameHelper.Graphics;
-
-protected override void Initialize()
-{
-    base.Initialize(); // the native window now exists
-
-    WindowIcon.Apply(Window.Handle, "Content/Icon.ico");
-}
+entryAssembly.GetManifestResourceStream(entryAssembly.GetName().Name + ".Icon.bmp") // e.g. "MyGame.Icon.bmp"
+    ?? entryAssembly.GetManifestResourceStream("Icon.bmp")
+    ?? typeof(SdlGameWindow).Assembly.GetManifestResourceStream("MonoGame.bmp");      // ← the MonoGame logo
 ```
 
-> Pair it with `<ApplicationIcon>Content\Icon.ico</ApplicationIcon>` in the `.csproj` for the **executable's** icon (Explorer, shortcuts, and the taskbar when launched from the `.exe`). The helper keeps the loaded `HICON`s alive internally, so it should be called once, after the window exists.
+…and hands it to `SDL_SetWindowIcon`. So to use **your own** window icon, embed a 32-bit `Icon.bmp` at the
+project root:
+
+```xml
+<PropertyGroup>
+  <ApplicationIcon>Content\Icon.ico</ApplicationIcon>   <!-- exe icon -->
+</PropertyGroup>
+
+<ItemGroup>
+  <EmbeddedResource Include="Icon.bmp" />               <!-- window icon (SDL) -->
+</ItemGroup>
+```
+
+> ⚠️ **Do not try `WM_SETICON` on `GameWindow.Handle` for DesktopGL.** That handle is the **`SDL_Window*`**,
+> not a Win32 `HWND` (`Windowing backend`: "For WindowsDX this is the Win32 window handle (HWND). For
+> DesktopGL this is the SDL window handle."). Sending window messages to it is undefined behaviour — and
+> MonoGame will happily overwrite whatever you set, because it applies the icon during window creation.
+
+> ℹ️ The `.bmp` must be **32 bpp** with alpha (SDL loads it as `SDL_PIXELFORMAT_ARGB8888`). A 256×256 image
+> from a multi-resolution `.ico` is a good source; Windows scales it per surface. Verify the resource name:
+> `Assembly.GetManifestResourceNames()` must contain `<AssemblyName>.Icon.bmp`.
 
 ---
 
