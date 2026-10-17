@@ -27,7 +27,7 @@ Play sound effects and background music without depending on external codecs or 
 
 ### 3. Modal Dialog & Escape Stack
 Manage stacked UI menus, popups, and confirmation dialogs:
-- Register `IModalDialog` instances with `Push`, `Pop`, and `PopAll`.
+- Register `IModalDialog` instances with `Push`, `Pop`, and `Clear` (plus `Remove` for one dialog).
 - Automatically responds to the **Escape** key and GamePad **B** button to close the topmost modal.
 - Integrates with `IUiBlocker` to prevent background clicks or gameplay interactions while modals or transitions are active.
 
@@ -421,6 +421,174 @@ Key properties:
 > The value type allocates nothing per update and does not depend on Nez or Gum: it only needs
 > `Microsoft.Xna.Framework.Vector2`.
 
+### 15. Pure MonoGame Texture Atlas & Gum UI Synchronization (`TextureAtlas`)
+
+- `TextureAtlas` + `AtlasRegion`: A pure MonoGame parser and container for **libGDX**-style `.atlas` files (produced by Nez's `SpriteAtlasPacker`, TexturePacker, or GDX tools).
+- **Zero third-party runtime dependencies**: works in vanilla MonoGame without requiring Nez, Gum, or external native DLLs.
+- Includes **headless parsing** support for unit tests and CI pipelines (parses regions without requiring an initialized GPU device).
+
+```csharp
+using Wagenheimer.MonoGameHelper.Graphics;
+
+// Load atlas and texture page from disk
+using var atlas = TextureAtlas.FromFile(GraphicsDevice, "Content/Atlases/menu.atlas");
+
+// Access regions by sprite name (case-insensitive)
+AtlasRegion buttonRegion = atlas["btn_play"];
+Rectangle srcRect = buttonRegion.Bounds; // source rect in pixels
+Point originalSize = buttonRegion.OriginalSize; // size before whitespace trim
+
+// Multi-resolution art scale
+float baseScale = atlas.ArtScale.BaseScale; // 1.0 (1x), 0.5 (2x), 0.25 (4x)
+
+// Draw via standard MonoGame SpriteBatch
+spriteBatch.Draw(
+    atlas.Texture,
+    position: new Vector2(100, 100),
+    sourceRectangle: buttonRegion.Bounds,
+    color: Color.White,
+    rotation: 0f,
+    origin: Vector2.Zero,
+    scale: atlas.ArtScale.ToAbsolute(),
+    effects: SpriteEffects.None,
+    layerDepth: 0f);
+```
+
+| Member | Meaning |
+| :--- | :--- |
+| `FromFile(graphicsDevice, atlasPath, imagePath?, premultiplyAlpha?)` | Loads `.atlas` + `.png` from disk (supports automatic alpha premultiplication) |
+| `Parse(atlasContent, texture?, defaultScale?)` | Parses atlas text format (can run headlessly without a texture) |
+| `Regions` | Read-only dictionary of all parsed sprite regions |
+| `this[name]` / `TryGetRegion(name, out region)` | Fast sprite lookup by name (case-insensitive) |
+| `ArtScale` | Art packing factor (`1x`, `2x`, `4x`) and scale conversion utilities |
+| `Bounds` / `OriginalSize` / `Offset` / `Index` | Region properties matching standard libGDX specification |
+
+---
+
+#### The Texture Atlas & Gum UI Pipeline
+
+When building games with modern UI engines like **Gum** in MonoGame, two conflicting requirements arise:
+1. **At authoring time (Gum Tool)**: The visual editor needs sprite coordinates (`TextureLeft`, `TextureTop`, `TextureWidth`, `TextureHeight`) written inside `.gusx`/`.gucx` XML files to display live previews.
+2. **At build and runtime**: Sprites must be packed into texture sheets (`.atlas` + `.png`) with bleed extrusion to prevent pixel seams, eliminate draw calls, and support multi-resolution scaling (`1x`, `2x`, `4x`). Manually updating XML coordinates whenever an atlas is re-packed is impractical.
+
+`Wagenheimer.MonoGameHelper` provides a clean, automated 3-tier pipeline located in `tools/`:
+
+```
+┌───────────────────────────────────────────────┐
+│  1. Source PNGs (tools/AssetsSource/<Atlas>/)  │
+└───────────────────────┬───────────────────────┘
+                        │
+                        ▼ (MSBuild incremental build or tools/pack-atlases.ps1)
+┌───────────────────────────────────────────────┐
+│     2. Atlas Packing (.atlas + .png)          │
+│        - Extrusion bleed & padding >= 2       │
+│        - Scale metadata (scale: 1, 2, 4)      │
+└───────────────┬───────────────────────────────┘
+                │
+        ┌───────┴────────────────────────┐
+        ▼                                ▼
+┌───────────────────────────────┐ ┌───────────────────────────────────────────┐
+│ 3a. sync-gum-preview-coords   │ │ 3b. Runtime Binding                       │
+│    Injects exact coordinates  │ │    - TextureAtlas (pure MonoGame)         │
+│    into Gum .gusx / .gucx     │ │    - GumAtlasBinder (by sprite name)      │
+│    (Gum Tool preview works!)  │ │    - Immune to coordinate changes!        │
+└───────────────────────────────┘ └───────────────────────────────────────────┘
+```
+
+#### 1. Automatic Incremental Build via MSBuild Target
+
+Drop this target into your game's `.csproj`. It runs only when PNGs in `AssetsSource` are modified:
+
+```xml
+<!-- Incremental Atlas Packing & Gum Preview Sync on Build -->
+<ItemGroup>
+  <AtlasSourceFiles Include="$(MSBuildThisFileDirectory)..\..\tools\AssetsSource\**\*.*" />
+  <AtlasOutputFiles Include="$(MSBuildThisFileDirectory)Content\Atlases\menu.atlas;$(MSBuildThisFileDirectory)Content\Atlases\game.atlas" />
+</ItemGroup>
+
+<Target Name="AutoPackAtlases" BeforeTargets="BeforeBuild" Inputs="@(AtlasSourceFiles)" Outputs="@(AtlasOutputFiles)">
+  <Message Importance="high" Text="==> [AutoPackAtlases] Changes detected in AssetsSource. Packing atlases..." />
+  <Exec Command="powershell -ExecutionPolicy Bypass -File &quot;$(MSBuildThisFileDirectory)..\..\tools\pack_atlases.ps1&quot;" />
+</Target>
+```
+
+#### 2. Standalone Utility Scripts (`tools/`)
+
+The repository includes ready-to-use PowerShell scripts:
+- `tools/pack-atlases.ps1`: Parameterized script that loops over folders in `AssetsSource`, calls the atlas packer, and invokes the Gum preview synchronizer.
+- `tools/sync-gum-preview-coords.ps1`: Reads any generated `.atlas` file and injects the exact pixel coordinates into matching `SourceFile` properties in Gum XML files.
+
+---
+
+### 16. Gum UI Extensions (`Wagenheimer.MonoGameHelper.Gum`)
+
+The companion package **`Wagenheimer.MonoGameHelper.Gum`** provides specialized extensions for games using **Gum** (`Gum.MonoGame` + `KernSmith.MonoGameGum`):
+- **Casual & Commercial Grade Font Materials (`GumFontMaterials`)**: Vertical two-color gradients and soft blurred drop shadows baked directly into font textures via FreeType/KernSmith.
+- **Dynamic Atlas Binding (`GumAtlasBinder`)**: Binds Gum visual elements and container buttons to texture atlas regions automatically without manual C# assignment loops.
+
+#### Why Font Materials?
+Standard Gum text renders as a single flat solid color with an optional hard 1-pixel black outline (`OutlineThickness`). In commercial casual games (such as Unity TextMeshPro SDF materials or classic ZenGL games), titles and HUD numbers always feature **rich vertical gradients** (e.g., top golden yellow `#FFD800` into bottom amber orange `#FF8E00`) and **soft, blurred drop shadows**.
+
+`GumFontMaterials` brings this visual quality to Gum by generating an RGBA `BitmapFont` texture via KernSmith and applying it to `TextRuntime.Typeface`:
+
+```csharp
+using Wagenheimer.MonoGameHelper.Gum;
+
+// 1. Once at startup (in Game.Initialize, right after GumUI.Initialize):
+GumFontMaterials.SetGraphicsDevice(GraphicsDevice);
+
+// 2. In your scene or screen:
+// Apply a built-in designer preset:
+GumFontMaterials.Apply(titleLabel, FontMaterial.Gold, "Content/Gum/Fonts/TitleFont.ttf", fontSize: 36);
+
+// Or create custom materials with specific colors and shadow blur:
+var royalMaterial = new FontMaterial(
+    GradientTop: new Color(255, 230, 100),
+    GradientBottom: new Color(200, 130, 20),
+    GradientAngle: 90f,
+    ShadowOpacity: 0.65f,
+    ShadowBlur: 4f,
+    ShadowOffsetY: 3);
+
+GumFontMaterials.Apply(scoreLabel, royalMaterial, "Content/Gum/Fonts/UiFont.ttf", fontSize: 24);
+
+// 3. Or apply by element name in a Gum container hierarchy:
+GumFontMaterials.ApplyTo(screenContainer, "txtPlayerName", FontMaterial.Silver, fontPath, fontSize: 18);
+```
+
+#### Designer Presets Available Out of the Box:
+| Preset | Colors (Top ➔ Bottom) | Typical Use |
+| :--- | :--- | :--- |
+| `FontMaterial.Gold` | `#FFD800` (Yellow) ➔ `#FF8E00` (Amber) | Main titles, coins, primary buttons |
+| `FontMaterial.Silver` | `#FFFFFF` (White) ➔ `#B0B0B0` (Silver) | Subtitles, rank labels, descriptions |
+| `FontMaterial.Bronze` | `#E6A15C` (Bronze) ➔ `#8C4E1A` (Dark Bronze) | Medieval menus, rustic badges |
+| `FontMaterial.Emerald` | `#90FF00` (Lime) ➔ `#3A8F24` (Forest Green) | Level clear, victory messages, success |
+| `FontMaterial.Ruby` | `#FF4B4B` (Coral) ➔ `#9E0000` (Crimson) | Danger, warnings, loss banners |
+| `FontMaterial.Amber` | `#FFB900` (Gold) ➔ `#F76A07` (Deep Orange) | Energy, objective counters |
+| `FontMaterial.Sapphire`| `#00D2FF` (Cyan) ➔ `#0055D4` (Ocean Blue) | Mana, water, cold effects |
+| `FontMaterial.Amethyst`| `#E084FF` (Lilac) ➔ `#6818A5` (Deep Purple) | Magic powers, mysterious rewards |
+| `FontMaterial.WhiteShadow`| `#FFFFFF` (White) ➔ `#FFFFFF` (White) | Solid white text with a soft shadow (no gradient) |
+
+#### Window Resize Handling:
+When the game window is resized, call `GumFontMaterials.ReapplyAll()` to automatically reconstruct active materials at the new scale.
+
+---
+
+#### Automatic Atlas Binding (`GumAtlasBinder`)
+
+Allows binding Gum UI elements directly to a libGDX texture atlas:
+
+```csharp
+// Single element binding:
+GumAtlasBinder.ApplyRegion(myIconSprite, atlas, "icon_sword");
+
+// Or data-driven binding from a JSON manifest (Content/Gum/atlas-bindings.json):
+GumAtlasBinder.BindFromJson(
+    screenRoot,
+    "Content/Gum/atlas-bindings.json",
+    spriteKey => atlas.TryGetRegion(spriteKey, out var r) ? (atlas.Texture, r.Bounds) : null);
+```
+
 ---
 
 ## Quick Start
@@ -452,7 +620,7 @@ public class MyGame : Game
         // Set custom hardware cursor for mouse mode
         using var cursorStream = File.OpenRead("Content/cursor_hardware.png");
         var cursorTexture = Texture2D.FromStream(GraphicsDevice, cursorStream);
-        InputHelperManager.Instance.CursorManager.SetCustomHardwareCursor(cursorTexture, originX: 0, originY: 0);
+        InputHelperManager.Instance.CursorManager.SetCustomHardwareCursor(cursorTexture, hotspotX: 0, hotspotY: 0);
 
         // Optional: honour a "Custom Cursor" setting (false = default OS arrow).
         // Takes effect immediately in Mouse mode; GamePad/Touch are unaffected.
@@ -550,8 +718,11 @@ var score = loc.Format("hud.score", 1200);  // "Score: 1200"
 
 ```
 MonoGameHelper/
-├─ src/Wagenheimer.MonoGameHelper/   # the library (Audio, Graphics, Input, Layout, Localization, Storage, UI)
+├─ src/
+│  ├─ Wagenheimer.MonoGameHelper/       # Core library (pure MonoGame, zero UI dependencies)
+│  └─ Wagenheimer.MonoGameHelper.Gum/   # Gum UI extensions (GumFontMaterials, GumAtlasBinder)
 ├─ tests/Wagenheimer.MonoGameHelper.Tests/  # xUnit test suite
+├─ tools/                               # automation scripts (pack-atlases.ps1, sync-gum-preview-coords.ps1)
 ├─ README.md
 └─ Wagenheimer.MonoGameHelper.slnx
 ```

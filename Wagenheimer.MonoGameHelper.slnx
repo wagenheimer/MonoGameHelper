@@ -1,6 +1,7 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/Wagenheimer.MonoGameHelper/Wagenheimer.MonoGameHelper.csproj" />
+    <Project Path="src/Wagenheimer.MonoGameHelper.Gum/Wagenheimer.MonoGameHelper.Gum.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Wagenheimer.MonoGameHelper.Tests/Wagenheimer.MonoGameHelper.Tests.csproj" />
