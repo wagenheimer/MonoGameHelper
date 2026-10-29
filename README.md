@@ -782,3 +782,7 @@ no Nez/Gum/Unity types), add XML docs for public APIs, and cover new behavior wi
 
 ## License
 MIT License. Created by Cezar Wagenheimer / Green Sauce Games.
+
+---
+
+Explore more open-source projects at **[wagenheimer.com/opensource](https://wagenheimer.com/opensource)**.
