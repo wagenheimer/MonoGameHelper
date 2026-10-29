@@ -1,0 +1,66 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - ".github/**"
+      - "README.md"
+      - "CHANGELOG.md"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    if: "!contains(github.event.head_commit.message, 'chore: bump version')"
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Bump patch version
+        id: bump
+        shell: pwsh
+        run: |
+          $csproj = "src/Wagenheimer.MonoGameHelper/Wagenheimer.MonoGameHelper.csproj"
+          $current = [regex]::Match((Get-Content $csproj -Raw), "<Version>([^<]+)</Version>").Groups[1].Value
+          $p = $current.Split(".")
+          $new = "$($p[0]).$($p[1]).$([int]$p[2] + 1)"
+          Get-ChildItem -Path src -Recurse -Filter *.csproj | ForEach-Object {
+            $text = Get-Content $_.FullName -Raw
+            $text -replace "<Version>[^<]+</Version>", "<Version>$new</Version>" | Set-Content $_.FullName -NoNewline
+          }
+          "current=$current" >> $env:GITHUB_OUTPUT
+          "new=$new" >> $env:GITHUB_OUTPUT
+
+      - name: Build and test
+        run: |
+          dotnet build Wagenheimer.MonoGameHelper.slnx -c Release
+          dotnet test Wagenheimer.MonoGameHelper.slnx -c Release --no-build
+
+      - name: Pack
+        run: dotnet pack Wagenheimer.MonoGameHelper.slnx -c Release -o artifacts
+
+      - name: Commit, tag and push
+        shell: pwsh
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add src
+          git commit -m "chore: bump version to ${{ steps.bump.outputs.new }}"
+          git tag "v${{ steps.bump.outputs.new }}"
+          git push origin HEAD:main
+          git push origin "v${{ steps.bump.outputs.new }}"
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: "v${{ steps.bump.outputs.new }}"
+          files: artifacts/*.nupkg
+          generate_release_notes: true
