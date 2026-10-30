@@ -1,9 +1,12 @@
 <Solution>
   <Folder Name="/src/">
+    <Project Path="src/Wagenheimer.MonoGameHelper.Particles/Wagenheimer.MonoGameHelper.Particles.csproj" />
     <Project Path="src/Wagenheimer.MonoGameHelper/Wagenheimer.MonoGameHelper.csproj" />
     <Project Path="src/Wagenheimer.MonoGameHelper.Gum/Wagenheimer.MonoGameHelper.Gum.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/Wagenheimer.MonoGameHelper.Particles.Tests/Wagenheimer.MonoGameHelper.Particles.Tests.csproj" />
     <Project Path="tests/Wagenheimer.MonoGameHelper.Tests/Wagenheimer.MonoGameHelper.Tests.csproj" />
+    <Project Path="tests/Wagenheimer.MonoGameHelper.Gum.Tests/Wagenheimer.MonoGameHelper.Gum.Tests.csproj" />
   </Folder>
 </Solution>

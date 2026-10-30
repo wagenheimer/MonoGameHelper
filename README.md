@@ -783,6 +783,46 @@ no Nez/Gum/Unity types), add XML docs for public APIs, and cover new behavior wi
 ## License
 MIT License. Created by Cezar Wagenheimer / Green Sauce Games.
 
+### Gum: reusable show/hide motion
+
+`Wagenheimer.MonoGameHelper.Gum.GumMotionTransitions` animates menus, dialogs and panels by position. It preserves authored layout, dimensions, opacity, texture and button state; cubic easing uses a quick arrival and a shorter departure. One controller can serve all UI surfaces.
+
+```csharp
+var transitions = new GumMotionTransitions();
+transitions.Show(menu, new Vector2(0, 320), duration: 0.36f);
+// Once per frame:
+transitions.Update((float)gameTime.ElapsedGameTime.TotalSeconds);
+// Remove only after departure finishes:
+transitions.Hide(menu, new Vector2(0, 320), onCompleted: menu.RemoveFromRoot);
+// Before changing scenes/removing a UI tree:
+transitions.Cancel(menu);
+```
+
+Pass direct `stationaryChildren` (pixel-based X/Y) for modal backdrops that should stay fixed while the root moves. Reversing an unfinished transition continues from the current position; cancel drops stale callbacks and restores the authored position. The update step is capped so initial texture uploads cannot skip the entrance. `IsAnimating` and completion callbacks support input/navigation gating. Tests are in `tests/Wagenheimer.MonoGameHelper.Gum.Tests`.
+
+## Pointer hints and mobile input (2026-10-18)
+
+`Input.PrimaryTouchPointer` tracks one finger from press to release, preserves final release position and prevents another finger from taking over. `InputHelperManager.TouchPointer` exposes the sampled pointer. The manager forwards touch button edges to VirtualCursor and clears stale button edges when using mouse or disconnected gamepad. Call the manager once per frame before scene/UI input dispatch, using the same coordinate conversion as your UI.
+
+`Input.PointerHintGesture` implements mouse hover (350 ms), touch hold (500 ms), movement cancellation and consumed releases. Call Update once before dispatching click handlers. Check SuppressClick in action handlers; Reset when a modal opens or the screen is removed.
+
+`Wagenheimer.MonoGameHelper.Gum.GumHintController` binds this policy to an authored Gum panel and TextRuntime title/body. Register stable target keys and their visuals with dynamic content delegates. Information-only targets show help on a short tap. Action targets retain normal short clicks, while held/dragged touches cannot activate them. HandleClick gates callbacks. BottomReservedTop keeps hints above a bottom HUD; top-screen targets flip below their control. Reset clears the hint on teardown.
+
+```csharp
+var hints = new GumHintController(panel, title, body) { BottomReservedTop = 910 };
+hints.Register("power", powerVisual, () => ("Axe", "Choose a tile after selecting."));
+// Once per frame before Forms dispatch:
+hints.Update(pointerDesign, primaryDown, isTouch, deltaTime, canvasWidth, canvasHeight);
+power.Click += (_, _) => { if (hints.HandleClick("power")) SelectPower(); };
+```
+
+The host owns styling, localization and business rules. This adds no game-specific dependency to the package. Tests cover gesture ownership/cancellation, final release position, touch hold/drag suppression, viewport clamping and reserved HUD avoidance. NuGet packages were built locally; publication is a separate action.
+
+
+## Optional particles package
+
+`Wagenheimer.MonoGameHelper.Particles` wraps MonoGame.Extended 6.1.1 with bounded particle instances, renderer-neutral draw snapshots, and an atlas-only Ember loader. It has no Nez/Gum dependency. See [particle usage and ownership](src/Wagenheimer.MonoGameHelper.Particles/README.md).
+
 ---
 
 Explore more open-source projects at **[wagenheimer.com/opensource](https://wagenheimer.com/opensource)**.
