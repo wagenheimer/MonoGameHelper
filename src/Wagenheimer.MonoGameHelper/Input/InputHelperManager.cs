@@ -18,6 +18,7 @@ public class InputHelperManager
 
     public InputDeviceType ActiveDevice { get; private set; } = InputDeviceType.MouseKeyboard;
     public VirtualCursor VirtualCursor { get; }
+    public PrimaryTouchPointer TouchPointer { get; } = new();
     public HybridCursorManager CursorManager { get; }
 
     /// <summary>
@@ -55,6 +56,13 @@ public class InputHelperManager
         var currentMouseState = Mouse.GetState();
         var currentGamePadState = GamePad.GetState(PlayerIndex.One);
         var currentTouches = TouchPanel.GetState();
+        Span<TouchContact> contacts = stackalloc TouchContact[currentTouches.Count];
+        for (int i=0;i<currentTouches.Count;i++)
+        {
+            var t=currentTouches[i];
+            contacts[i]=new TouchContact(t.Id,t.Position,t.State is TouchLocationState.Pressed or TouchLocationState.Moved);
+        }
+        TouchPointer.Update(contacts);
 
         // 1. TOUCH DETECTION
         bool hasActiveTouch = false;
@@ -64,11 +72,13 @@ public class InputHelperManager
             if (touch.State is TouchLocationState.Pressed or TouchLocationState.Moved)
             {
                 hasActiveTouch = true;
-                firstTouchPos = touch.Position;
+                firstTouchPos = TouchPointer.Position;
                 break;
             }
         }
 
+        hasActiveTouch |= TouchPointer.JustReleased;
+        if (TouchPointer.JustReleased) firstTouchPos=TouchPointer.Position;
         if (hasActiveTouch)
         {
             SwitchDevice(InputDeviceType.Touch);
@@ -126,6 +136,11 @@ public class InputHelperManager
             bool aDown = currentGamePadState.Buttons.A == ButtonState.Pressed;
             VirtualCursor.Update(currentGamePadState.ThumbSticks.Left, aDown, dt);
         }
+
+        if (ActiveDevice == InputDeviceType.Touch)
+            VirtualCursor.Update(Vector2.Zero, TouchPointer.IsDown, dt);
+        else if (ActiveDevice != InputDeviceType.GamePad || !currentGamePadState.IsConnected)
+            VirtualCursor.Update(Vector2.Zero, false, dt);
 
         // 5. UPDATE HYBRID CURSOR VISIBILITY
         CursorManager.UpdateForDevice(ActiveDevice);
